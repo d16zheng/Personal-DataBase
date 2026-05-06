@@ -1,0 +1,14 @@
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+
+# Keep real personal data out of a public repository.
+.env
+data/
+backups/
+exports/
+*.db
+*.pages
+*.sqlite
+*.sqlite3
