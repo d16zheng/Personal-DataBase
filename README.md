@@ -1,122 +1,82 @@
 # Personal Database Project
 
-This repository starts with an in-memory key-value store and is intended to grow
-into a personal database engine that can eventually support notes, tasks, media,
-finance, learning, and health records.
+A small Python database project with two active tracks:
 
-Because this repository should be safe to keep public:
+- a practical `SQLite`-backed personal database for typed records
+- a lower-level custom storage-engine track built around a key-value store,
+  append-only log, fixed-size pages, and an in-memory B-tree
 
-- commit code, tests, and sample data only
-- never commit real personal records
-- never commit secrets or local environment files
-- treat `data/`, `backups/`, and exported database files as private
+The SQLite path is the main usable system today. The custom engine remains in
+the repository as a foundation for learning and future experimentation.
 
-## Stage 1
+## Current Capabilities
 
-The current milestone is an in-memory key-value store with:
+### Typed personal records
 
-- `put`
-- `get`
-- `delete`
-- `list`
+The `PersonalDatabase` API currently supports:
 
-## Stage 2
+- clothing items with type-specific validation for sweaters, shirts, pants,
+  shorts, and jackets
+- books with title, author, reading status, and optional `date_started`
+- create, read, update, and delete operations
+- tags on books and clothing items
+- typed queries by status, type, prefix, tag, and updated timestamp
+- cross-record summaries by tag and updated timestamp
 
-The store now also supports an append-only log:
+### Durability and recovery
 
-- every `put` is appended to a local log file
-- every `delete` is appended to the same log file
-- startup recovery replays the log to rebuild in-memory state
-- the storage layer lives under `src/personal_db/storage/` so the API and
-  persistence concerns stay separated
+The SQLite-backed layer currently includes:
 
-By default the CLI writes to `data/personal.db.log`, which is ignored by git so
-real local data stays out of the public repository.
+- explicit transactions through `PersonalDatabase.transaction()`
+- nested savepoints for composable writes
+- WAL mode with `synchronous=FULL`
+- explicit `checkpoint()` support
+- versioned schema migrations via `PRAGMA user_version`
 
-## Stage 3
+### Custom storage-engine track
 
-The storage engine now checkpoints records into fixed-size pages:
+The repository also contains a separate key-value engine that currently
+supports:
 
-- the main data file is a sequence of fixed-size pages
-- each page holds a compact set of serialized records
-- the append-only log acts like a short recovery journal rather than the only
-  source of truth
-- recovery loads page data first, then replays any uncheckpointed log entries
+- `put`, `get`, `delete`, `list`, and `size`
+- append-only log replay on startup
+- fixed-size page persistence
+- an in-memory B-tree primary index for ordered scans and lookups
 
-## Stage 4
+## Repository Layout
 
-The store now uses a B-tree primary index for keys:
-
-- keyed lookups use a B-tree instead of an unordered record map
-- ordered scans come directly from the tree traversal
-- the index is rebuilt from page storage on startup
-- this creates a clean stepping stone toward page-backed B-tree nodes later
-
-## Stage 5
-
-The project now also includes typed personal records backed by SQLite:
-
-- `clothing_items` stores sweaters, shirts, pants, shorts, and jackets with
-  type-specific constraints
-- `books` stores titles, authors, reading status, and `date_started`
-- all typed records include `id`, `created_at`, and `updated_at`
-- SQLite now acts as the durable store for real personal entities while the
-  earlier stages remain in the repository as foundational engine exercises
-
-This keeps the lower-level storage experiments intact while creating a more
-practical path for actual personal database use cases.
-
-## Stage 6
-
-The SQLite layer now has a tiny typed query API plus explicit transaction and
-recovery rules:
-
-- `ClothingQuery` supports filtering by clothing type, brand prefix, tag, and
-  updated-after timestamp
-- `BookQuery` supports filtering by status, title prefix, author prefix, tag,
-  and updated-after timestamp
-- records can be tagged and queried by tag across both books and clothing
-- `PersonalDatabase.transaction()` groups multiple writes into one atomic unit
-- failed transactions roll back all nested writes instead of leaving partial
-  state behind
-- SQLite runs in WAL mode with `synchronous=FULL`, so committed changes recover
-  on restart while uncommitted changes are discarded
-- `checkpoint()` merges committed WAL contents back into the main database file
-
-## Stage 7
-
-Typed records now support full lifecycle operations plus versioned schema
-migrations:
-
-- `update_book`, `update_clothing_item`, `delete_book`, and
-  `delete_clothing_item` are available through `PersonalDatabase`
-- updates preserve `created_at`, refresh `updated_at`, and still run through the
-  same validation rules as inserts
-- deletes remove the primary row and any related tags in the same transaction
-- SQLite startup now runs versioned migrations using `PRAGMA user_version`
-- older typed-record files can be upgraded in place instead of rebuilt
-- migration and record lifecycle behavior are covered by persistence tests
+- `src/personal_db/store.py`: public API for both database tracks
+- `src/personal_db/storage/sqlite_backend.py`: SQLite-backed typed records
+- `src/personal_db/storage/migrations.py`: schema versioning and upgrades
+- `src/personal_db/query.py`: typed query objects
+- `src/personal_db/models.py`: shared record models
+- `src/personal_db/storage/`: log, page, and storage-engine primitives
+- `src/personal_db/index/`: B-tree index
+- `src/personal_db/cli.py`: tiny CLI for the key-value engine
+- `tests/`: persistence, query, transaction, and migration tests
 
 ## Running
+
+Run the key-value CLI:
 
 ```bash
 python3 -m src.personal_db.cli
 ```
 
-## Testing
+Run the test suite:
 
 ```bash
 python3 -m pytest
 ```
 
-## Roadmap
+## Notes
 
-1. In-memory key-value store
-2. Append-only log for persistence
-3. Page-based storage
-4. B-tree index
-5. Typed SQLite records for personal data
-6. Tiny typed query layer
-7. Typed record updates, deletes, and migrations
-8. Query parser
-9. Richer transaction scheduling and recovery tooling
+- commit code, tests, and sample data only
+- do not commit real personal records or secrets
+- treat local database files under `data/` as private
+
+## Next Areas
+
+- expand typed personal record coverage
+- add richer querying and parsing
+- continue evolving the custom engine toward more realistic storage internals
